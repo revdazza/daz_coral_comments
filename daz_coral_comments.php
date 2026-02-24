@@ -672,8 +672,8 @@ HTML;
         return;
     }
 
-    // Single query fetches moderation queues and approved comments together
-    $query = '{
+    // Two separate queries so a failure in one cannot affect the other
+    $mod_result = daz_coral_api('{
         moderationQueues {
             unmoderated {
                 count
@@ -700,18 +700,20 @@ HTML;
                 }
             }
         }
-        comments(first: 20, orderBy: CREATED_AT_DESC, statuses: [APPROVED]) {
+    }');
+
+    $approved_result = daz_coral_api('{
+        comments(first: 20, orderBy: CREATED_AT_DESC) {
             nodes {
                 id body createdAt
                 author { username }
                 story { url metadata { title } }
             }
         }
-    }';
+    }');
 
-    $result  = daz_coral_api($query);
-    $queues  = $result['data']['moderationQueues'] ?? null;
-    $approved = $result['data']['comments']['nodes'] ?? [];
+    $queues   = $mod_result['data']['moderationQueues']    ?? null;
+    $approved = $approved_result['data']['comments']['nodes'] ?? [];
 
     $pending_count  = (int) ($queues['unmoderated']['count'] ?? 0);
     $reported_count = (int) ($queues['reported']['count']    ?? 0);

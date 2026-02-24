@@ -23,6 +23,7 @@ if (!defined('txpinterface')) @die('txp plugin');
 // ============================================================
 
 if (@txpinterface === 'admin') {
+    add_privs('plugin_prefs.daz_coral_comments', '1,2');
     register_callback('daz_coral_prefs_page', 'plugin_prefs.daz_coral_comments');
 }
 

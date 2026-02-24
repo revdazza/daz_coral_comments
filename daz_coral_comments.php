@@ -55,6 +55,7 @@ function daz_coral_ensure_help()
 function daz_coral_prefs_page()
 {
     $action = ps('daz_coral_action');
+    $notice = null;
 
     if ($action === 'save_prefs') {
         daz_coral_save_prefs();
@@ -63,12 +64,21 @@ function daz_coral_prefs_page()
     } elseif ($action === 'revoke_token') {
         set_pref('daz_coral_api_token',    '',        'daz_coral_comments', 1, 'text_input', 5);
         set_pref('daz_coral_token_status', 'revoked', 'daz_coral_comments', 1, 'text_input', 80);
+    } elseif ($action === 'approve_comment') {
+        $notice = daz_coral_do_moderate('approve');
+    } elseif ($action === 'reject_comment') {
+        $notice = daz_coral_do_moderate('reject');
     }
 
     $tab = gps('daz_tab') ?: 'settings';
+    if (in_array($action, ['approve_comment', 'reject_comment'])) {
+        $tab = 'moderation';
+    }
 
     if ($tab === 'help') {
         daz_coral_help_page();
+    } elseif ($tab === 'moderation') {
+        daz_coral_moderation_page($notice);
     } else {
         daz_coral_options();
     }
@@ -175,8 +185,9 @@ function daz_coral_admin_chrome($active_tab)
     $base_url  = '?event=plugin_prefs.daz_coral_comments';
 
     $tabs = [
-        'settings' => 'Settings',
-        'help'     => 'Help',
+        'settings'   => 'Settings',
+        'moderation' => 'Moderation',
+        'help'       => 'Help',
     ];
 
     $tab_html = '';
@@ -226,6 +237,33 @@ function daz_coral_admin_chrome($active_tab)
   .dcc-help td:first-child { font-family:monospace; white-space:nowrap; color:#2c5282; }
   .dcc-help .dcc-note { background:#fff8e1; border-left:3px solid #f0a500; padding:10px 14px;
                         margin-bottom:14px; font-size:.85rem; border-radius:0 4px 4px 0; }
+  /* Moderation */
+  .dcc-mod-subtabs { display:flex; gap:8px; margin-bottom:20px; }
+  .dcc-mod-subtab  { padding:5px 16px; text-decoration:none; color:#333; border-radius:4px;
+                     font-size:.9rem; border:1px solid #ddd; background:#fff; }
+  .dcc-mod-subtab:hover      { background:#f5f5f5; }
+  .dcc-mod-subtab-active     { background:#e8f0fe; border-color:#4a7cdc; font-weight:600; color:#2c5282; }
+  .dcc-mod-empty   { color:#999; font-style:italic; margin:24px 0; font-size:.95rem; }
+  .dcc-mod-card    { background:#fff; border:1px solid #e0e0e0; border-radius:8px;
+                     padding:16px 20px; margin-bottom:14px; }
+  .dcc-mod-article { font-size:.8rem; text-transform:uppercase; letter-spacing:.04em;
+                     color:#888; margin-bottom:2px; }
+  .dcc-mod-article a { color:#2c5282; text-decoration:none; }
+  .dcc-mod-article a:hover { text-decoration:underline; }
+  .dcc-mod-meta    { font-size:.88rem; color:#888; margin-bottom:8px; }
+  .dcc-mod-body    { font-size:1rem; color:#222; line-height:1.5; margin-bottom:14px;
+                     padding:10px 14px; background:#f9f9f9; border-radius:4px; }
+  .dcc-mod-actions { display:flex; gap:8px; }
+  .dcc-mod-approve { background:#2a7a2a; color:#fff; border:none; padding:8px 20px;
+                     border-radius:4px; cursor:pointer; font-size:.95rem; font-weight:600; }
+  .dcc-mod-approve:hover { background:#1e5c1e; }
+  .dcc-mod-reject  { background:#c00; color:#fff; border:none; padding:8px 20px;
+                     border-radius:4px; cursor:pointer; font-size:.95rem; font-weight:600; }
+  .dcc-mod-reject:hover  { background:#900; }
+  .dcc-mod-notice-ok  { background:#e6f4ea; border:1px solid #a8d5b5; color:#1e5c1e;
+                         padding:10px 16px; border-radius:4px; margin-bottom:16px; font-weight:600; }
+  .dcc-mod-notice-err { background:#fdecea; border:1px solid #f5c6c6; color:#900;
+                         padding:10px 16px; border-radius:4px; margin-bottom:16px; font-weight:600; }
 </style>
 <div class="dcc-admin">
   <div class="dcc-tabs">{$tab_html}</div>
@@ -534,6 +572,169 @@ echo '&lt;!-- SESSION: ' . print_r(\$_SESSION, true) . ' --&gt;';
 </div>
 </div>
 HTML;
+}
+
+// ============================================================
+// ADMIN — MODERATION PAGE
+// ============================================================
+
+function daz_coral_do_moderate($action)
+{
+    $comment_id  = ps('daz_coral_comment_id');
+    $revision_id = ps('daz_coral_revision_id');
+
+    if (!$comment_id || !$revision_id) {
+        return ['error' => 'Missing comment or revision ID.'];
+    }
+
+    $mutation_name = ($action === 'approve') ? 'approveComment' : 'rejectComment';
+    $mutation = 'mutation ModerateComment($commentID: ID!, $commentRevisionID: ID!) {
+        ' . $mutation_name . '(input: {
+            clientMutationId: ""
+            commentID: $commentID
+            commentRevisionID: $commentRevisionID
+        }) {
+            comment { id status }
+        }
+    }';
+
+    $result = daz_coral_api($mutation, [
+        'commentID'         => $comment_id,
+        'commentRevisionID' => $revision_id,
+    ]);
+
+    if ($result === null) {
+        return ['error' => 'API call failed — check domain and token in Settings.'];
+    }
+
+    if (!empty($result['errors'])) {
+        return ['error' => txpspecialchars($result['errors'][0]['message'] ?? 'Unknown error')];
+    }
+
+    return ['success' => true, 'action' => $action];
+}
+
+function daz_coral_moderation_page($notice = null)
+{
+    $txp_token = daz_coral_admin_chrome('moderation');
+    $queue     = gps('daz_queue') ?: 'unmoderated';
+    $base_url  = '?event=plugin_prefs.daz_coral_comments&amp;daz_tab=moderation';
+
+    $domain = get_pref('daz_coral_domain', '');
+    $token  = get_pref('daz_coral_api_token', '');
+
+    if (!$domain || !$token) {
+        echo '<p class="dcc-err">No API token configured. '
+            . '<a href="?event=plugin_prefs.daz_coral_comments&amp;daz_tab=settings">Go to Settings</a> to generate one.</p>';
+        echo '</div>';
+        return;
+    }
+
+    $query = '{
+        moderationQueues {
+            unmoderated {
+                count
+                comments(first: 20) {
+                    nodes {
+                        id body
+                        revision { id }
+                        author { id username }
+                        story { url metadata { title } }
+                        createdAt
+                    }
+                }
+            }
+            reported {
+                count
+                comments(first: 20) {
+                    nodes {
+                        id body
+                        revision { id }
+                        author { id username }
+                        story { url metadata { title } }
+                        createdAt
+                    }
+                }
+            }
+        }
+    }';
+
+    $result  = daz_coral_api($query);
+    $queues  = $result['data']['moderationQueues'] ?? null;
+
+    $pending_count  = (int) ($queues['unmoderated']['count'] ?? 0);
+    $reported_count = (int) ($queues['reported']['count']    ?? 0);
+    $comments       = $queues[$queue]['comments']['nodes']   ?? [];
+
+    $pending_label  = 'Pending'  . ($pending_count  ? " ({$pending_count})"  : '');
+    $reported_label = 'Reported' . ($reported_count ? " ({$reported_count})" : '');
+    $p_class        = ($queue === 'unmoderated') ? ' dcc-mod-subtab-active' : '';
+    $r_class        = ($queue === 'reported')    ? ' dcc-mod-subtab-active' : '';
+
+    $notice_html = '';
+    if ($notice) {
+        if (!empty($notice['success'])) {
+            $verb = ($notice['action'] === 'approve') ? 'approved' : 'rejected';
+            $notice_html = "<div class=\"dcc-mod-notice-ok\">&#10003; Comment {$verb}.</div>";
+        } elseif (!empty($notice['error'])) {
+            $notice_html = '<div class="dcc-mod-notice-err">&#10007; ' . $notice['error'] . '</div>';
+        }
+    }
+
+    echo <<<HTML
+<div class="dcc-mod-subtabs">
+  <a href="{$base_url}&amp;daz_queue=unmoderated" class="dcc-mod-subtab{$p_class}">{$pending_label}</a>
+  <a href="{$base_url}&amp;daz_queue=reported"    class="dcc-mod-subtab{$r_class}">{$reported_label}</a>
+</div>
+{$notice_html}
+HTML;
+
+    if (!$comments) {
+        $label = ($queue === 'unmoderated') ? 'pending' : 'reported';
+        echo "<p class=\"dcc-mod-empty\">No {$label} comments. All clear!</p>";
+        echo '</div>';
+        return;
+    }
+
+    foreach ($comments as $c) {
+        $comment_id  = txpspecialchars($c['id']);
+        $revision_id = txpspecialchars($c['revision']['id'] ?? '');
+        $body        = txpspecialchars(strip_tags($c['body'] ?? ''));
+        $username    = txpspecialchars($c['author']['username'] ?? 'Unknown');
+        $story_url   = txpspecialchars($c['story']['url'] ?? '#');
+        $title       = txpspecialchars($c['story']['metadata']['title'] ?? $c['story']['url'] ?? '');
+        $date        = date('j M Y, g:ia', strtotime($c['createdAt']));
+
+        echo <<<HTML
+<div class="dcc-mod-card">
+  <div class="dcc-mod-article"><a href="{$story_url}" target="_blank">{$title}</a></div>
+  <div class="dcc-mod-meta">{$username} &middot; {$date}</div>
+  <div class="dcc-mod-body">{$body}</div>
+  <div class="dcc-mod-actions">
+    <form method="post" style="display:inline">
+      <input type="hidden" name="daz_coral_action"     value="approve_comment">
+      <input type="hidden" name="daz_coral_comment_id"  value="{$comment_id}">
+      <input type="hidden" name="daz_coral_revision_id" value="{$revision_id}">
+      <input type="hidden" name="daz_tab"              value="moderation">
+      <input type="hidden" name="daz_queue"            value="{$queue}">
+      <input type="hidden" name="_txp_token"           value="{$txp_token}">
+      <button type="submit" class="dcc-mod-approve">&#10003; Approve</button>
+    </form>
+    <form method="post" style="display:inline">
+      <input type="hidden" name="daz_coral_action"     value="reject_comment">
+      <input type="hidden" name="daz_coral_comment_id"  value="{$comment_id}">
+      <input type="hidden" name="daz_coral_revision_id" value="{$revision_id}">
+      <input type="hidden" name="daz_tab"              value="moderation">
+      <input type="hidden" name="daz_queue"            value="{$queue}">
+      <input type="hidden" name="_txp_token"           value="{$txp_token}">
+      <button type="submit" class="dcc-mod-reject">&#10007; Reject</button>
+    </form>
+  </div>
+</div>
+HTML;
+    }
+
+    echo '</div>'; // .dcc-admin
 }
 
 // ============================================================

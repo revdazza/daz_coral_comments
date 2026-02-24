@@ -23,13 +23,30 @@ if (!defined('txpinterface')) @die('txp plugin');
 // ============================================================
 
 if (@txpinterface === 'admin') {
-    register_callback('daz_coral_options',        'plugin_prefs.daz_coral_comments');
-    register_callback('daz_coral_handle_post',    'plugin_prefs.daz_coral_comments', '', 1);
+    register_callback('daz_coral_prefs_page', 'plugin_prefs.daz_coral_comments');
 }
 
 // ============================================================
-// ADMIN — FORM HANDLING
+// ADMIN — PREFERENCES PAGE (handles POST and renders form)
 // ============================================================
+
+function daz_coral_prefs_page()
+{
+    // Handle form submissions first
+    $action = ps('daz_coral_action');
+
+    if ($action === 'save_prefs') {
+        daz_coral_save_prefs();
+    } elseif ($action === 'generate_token') {
+        daz_coral_generate_token();
+    } elseif ($action === 'revoke_token') {
+        set_pref('daz_coral_api_token',    '',        'daz_coral_comments', 1, 'text_input', 5);
+        set_pref('daz_coral_token_status', 'revoked', 'daz_coral_comments', 1, 'text_input', 80);
+    }
+
+    // Then render the form
+    daz_coral_options();
+}
 
 function daz_coral_handle_post()
 {

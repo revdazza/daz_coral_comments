@@ -22,6 +22,11 @@ if (!defined('txpinterface')) @die('txp plugin');
 // BOOTSTRAP
 // ============================================================
 
+// Register public tags with TXP tag registry
+if (class_exists('\Textpattern\Tag\Registry')) {
+  Txp::get('\Textpattern\Tag\Registry')
+   ->register('daz_coral_embed')                                                                                                           ->register('daz_coral_recent')                                                                                                          ->register('daz_coral_count');                                                                                                          } 
+
 if (@txpinterface === 'admin') {
     add_privs('plugin_prefs.daz_coral_comments', '1,2');
     register_callback('daz_coral_prefs_page', 'plugin_prefs.daz_coral_comments');

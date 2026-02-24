@@ -33,6 +33,18 @@ if (class_exists('\Textpattern\Tag\Registry')) {
 if (@txpinterface === 'admin') {
     add_privs('plugin_prefs.daz_coral_comments', '1,2');
     register_callback('daz_coral_prefs_page', 'plugin_prefs.daz_coral_comments');
+    register_callback('daz_coral_install_help', 'plugin_lifecycle.daz_coral_comments');
+}
+
+function daz_coral_install_help($event, $step)
+{
+    if ($step !== 'enabled') return;
+
+    safe_update(
+        'txp_plugin',
+        "help = '" . doSlash('<p>See the <strong>Help</strong> tab within the plugin Options page for full documentation.</p>') . "'",
+        "name = 'daz_coral_comments'"
+    );
 }
 
 // ============================================================
@@ -52,7 +64,7 @@ function daz_coral_prefs_page()
         set_pref('daz_coral_token_status', 'revoked', 'daz_coral_comments', 1, 'text_input', 80);
     }
 
-    $tab = ps('daz_tab') ?: 'settings';
+    $tab = gps('daz_tab') ?: 'settings';
 
     if ($tab === 'help') {
         daz_coral_help_page();
@@ -174,28 +186,28 @@ function daz_coral_admin_chrome($active_tab)
 
     echo <<<HTML
 <style>
-  .dcc-admin { max-width:720px; font-family:sans-serif; font-size:.9rem; margin-top:16px; }
+  .dcc-admin { max-width:720px; font-family:sans-serif; font-size:1rem; margin-top:16px; }
   .dcc-tabs  { display:flex; gap:4px; margin-bottom:24px; border-bottom:2px solid #ddd; padding-bottom:0; }
-  .dcc-tab   { padding:7px 18px; text-decoration:none; color:#555; border-radius:4px 4px 0 0;
-               border:1px solid transparent; margin-bottom:-2px; font-size:.88rem; }
+  .dcc-tab   { padding:8px 20px; text-decoration:none; color:#555; border-radius:4px 4px 0 0;
+               border:1px solid transparent; margin-bottom:-2px; font-size:.95rem; }
   .dcc-tab:hover      { background:#f5f5f5; color:#333; }
   .dcc-tab-active     { background:#fff; border-color:#ddd #ddd #fff; color:#222; font-weight:600; }
-  .dcc-admin h3 { font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; color:#666;
+  .dcc-admin h3 { font-size:.88rem; text-transform:uppercase; letter-spacing:.06em; color:#666;
                   border-bottom:1px solid #eee; padding-bottom:5px; margin:28px 0 14px; }
   .dcc-admin h3:first-child { margin-top:0; }
-  .dcc-admin label { display:block; font-weight:600; margin-bottom:3px; }
+  .dcc-admin label { display:block; font-weight:600; margin-bottom:4px; font-size:.95rem; }
   .dcc-admin input[type=text],
-  .dcc-admin input[type=password] { width:100%; padding:6px 8px; border:1px solid #ccc;
-                                    border-radius:4px; box-sizing:border-box; margin-bottom:12px; font-size:.88rem; }
-  .dcc-admin .hint  { font-size:.78rem; color:#999; margin:-8px 0 12px; }
+  .dcc-admin input[type=password] { width:100%; padding:7px 9px; border:1px solid #ccc;
+                                    border-radius:4px; box-sizing:border-box; margin-bottom:14px; font-size:.95rem; }
+  .dcc-admin .hint  { font-size:.83rem; color:#999; margin:-10px 0 14px; }
   .dcc-admin .row   { display:flex; gap:16px; }
   .dcc-admin .row > div { flex:1; min-width:0; }
-  .dcc-admin .btn   { padding:7px 18px; border:none; border-radius:4px; cursor:pointer; font-size:.88rem; }
+  .dcc-admin .btn   { padding:8px 20px; border:none; border-radius:4px; cursor:pointer; font-size:.95rem; }
   .dcc-admin .btn-save    { background:#4a7c6f; color:#fff; }
   .dcc-admin .btn-connect { background:#2c5282; color:#fff; }
   .dcc-admin .btn-revoke  { background:#c00;    color:#fff; margin-left:8px; }
   .dcc-admin .token-row   { display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
-  .dcc-admin .token-preview { font-family:monospace; font-size:.78rem; color:#888; }
+  .dcc-admin .token-preview { font-family:monospace; font-size:.83rem; color:#888; }
   .dcc-ok   { color:#2a7a2a; font-weight:600; }
   .dcc-err  { color:#c00;    font-weight:600; }
   .dcc-warn { color:#a06000; font-weight:600; }
@@ -277,7 +289,7 @@ function daz_coral_options()
     <p class="hint">Copy the full key from Coral admin &rarr; Configure &rarr; Auth &rarr; Single Sign-On. The <code>ssosec_</code> prefix is stripped automatically.</p>
 
     <h3>Session Keys</h3>
-    <p class="hint" style="margin-top:-8px">The PHP <code>$_SESSION</code> variable names your site uses for the logged-in user.</p>
+    <p class="hint" style="margin-top:-8px">The PHP <code>$_SESSION</code> variable names your site sets when a user logs in.</p>
 
     <div class="row">
       <div>
@@ -484,7 +496,7 @@ function daz_coral_help_page()
   <h2>Initial Setup</h2>
   <p><strong>1. Coral domain</strong> — The full URL of your Coral installation, e.g. <code>https://comments.example.com</code>. No trailing slash.</p>
   <p><strong>2. SSO secret key</strong> — Found in your Coral admin panel under Configure &rarr; Auth &rarr; Single Sign-On. Copy the full key including the <code>ssosec_</code> prefix — the plugin strips it automatically.</p>
-  <p><strong>3. Session keys</strong> — The names of the <code>$_SESSION</code> variables your site sets when a user logs in. These must match exactly. Common values are <code>user</code>, <code>email</code>, and <code>username</code>.</p>
+  <p><strong>3. Session keys</strong> — The names of the <code>$_SESSION</code> variables your site sets when a user logs in. These must match exactly what your authentication system uses. Common values are <code>user</code>, <code>email</code>, and <code>username</code>.</p>
   <p><strong>4. API token</strong> — Required for the recent comments panel. Enter your Coral admin email and password and click Generate. The credentials are used once and never stored. The resulting token does not expire.</p>
   <p><strong>5. User avatars</strong> — If your site stores profile photos on the server, set the server path and web URL so the plugin can find them. Set the default photo filename for users without a photo.</p>
 

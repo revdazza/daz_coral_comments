@@ -13,6 +13,7 @@ Tested on Textpattern 4.9 / PHP 7.4.
 - **Comment counts** — embed Coral's `count.js` to display per-article comment counts
 - **Admin token generator** — generate a permanent Coral API token directly from the TXP admin panel, no server CLI access needed
 - **Profile photo support** — optionally display user avatars alongside recent comments
+- **Moderation panel** — approve and reject pending or reported comments from a dedicated page under Extensions
 
 ---
 
@@ -124,7 +125,25 @@ Coral SSO uses HS256 JWT tokens. The plugin generates tokens with:
 - 1-hour expiry
 - UUID `jti` claim
 
-The SSO secret is taken from the **SSO secret** pref. If your secret starts with `ssosec_` (the Coral admin panel prefix), that prefix is stripped automatically before signing.
+The SSO secret is taken from the **SSO secret** pref. Copy the full key exactly as shown in the Coral admin panel.
+
+---
+
+## Moderation
+
+The moderation panel is accessible at **Extensions → Comment Moderation** in the Textpattern admin nav. It requires a valid API token to be configured in the plugin Settings.
+
+The panel is split into two columns:
+
+**Left — Review Queue**
+- **Pending** tab: comments awaiting first moderation, with a count badge
+- **Reported** tab: comments flagged by readers, with a count badge
+- Each comment shows the article title, author, date, and comment body
+- **Approve** and **Reject** buttons action the comment immediately and refresh the queue
+
+**Right — Recent Approved Comments**
+- The 20 most recently approved comments across your site
+- Each entry links to the article and includes a **View comment →** link that opens the article page scrolled to the comment thread
 
 ---
 

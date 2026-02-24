@@ -15,7 +15,7 @@ if (!defined('txpinterface')) @die('txp plugin');
  *   <txp:daz_coral_count />   — comment count for a URL
  *
  * @author  daz
- * @version 0.1
+ * @version 0.2
  */
 
 // ============================================================
@@ -24,8 +24,11 @@ if (!defined('txpinterface')) @die('txp plugin');
 
 // Register public tags with TXP tag registry
 if (class_exists('\Textpattern\Tag\Registry')) {
-  Txp::get('\Textpattern\Tag\Registry')
-   ->register('daz_coral_embed')                                                                                                           ->register('daz_coral_recent')                                                                                                          ->register('daz_coral_count');                                                                                                          } 
+    Txp::get('\Textpattern\Tag\Registry')
+        ->register('daz_coral_embed')
+        ->register('daz_coral_recent')
+        ->register('daz_coral_count');
+}
 
 if (@txpinterface === 'admin') {
     add_privs('plugin_prefs.daz_coral_comments', '1,2');
@@ -38,7 +41,6 @@ if (@txpinterface === 'admin') {
 
 function daz_coral_prefs_page()
 {
-    // Handle form submissions first
     $action = ps('daz_coral_action');
 
     if ($action === 'save_prefs') {
@@ -50,34 +52,29 @@ function daz_coral_prefs_page()
         set_pref('daz_coral_token_status', 'revoked', 'daz_coral_comments', 1, 'text_input', 80);
     }
 
-    // Then render the form
-    daz_coral_options();
-}
+    $tab = ps('daz_tab') ?: 'settings';
 
-function daz_coral_handle_post()
-{
-    $action = ps('daz_coral_action');
-
-    if ($action === 'save_prefs') {
-        daz_coral_save_prefs();
-    } elseif ($action === 'generate_token') {
-        daz_coral_generate_token();
-    } elseif ($action === 'revoke_token') {
-        set_pref('daz_coral_api_token',    '',           'daz_coral_comments', 1, 'text_input', 5);
-        set_pref('daz_coral_token_status', 'revoked',    'daz_coral_comments', 1, 'text_input', 80);
+    if ($tab === 'help') {
+        daz_coral_help_page();
+    } else {
+        daz_coral_options();
     }
 }
 
 function daz_coral_save_prefs()
 {
     $fields = [
-        'daz_coral_domain'        => 10,
-        'daz_coral_sso_secret'    => 20,
-        'daz_coral_photo_path'    => 30,
-        'daz_coral_photo_url'     => 40,
-        'daz_coral_default_photo' => 50,
-        'daz_coral_recent_limit'  => 60,
-        'daz_coral_bg_color'      => 70,
+        'daz_coral_domain'           => 10,
+        'daz_coral_sso_secret'       => 20,
+        'daz_coral_session_user'     => 25,
+        'daz_coral_session_email'    => 26,
+        'daz_coral_session_username' => 27,
+        'daz_coral_photo_path'       => 30,
+        'daz_coral_photo_url'        => 40,
+        'daz_coral_default_photo'    => 50,
+        'daz_coral_recent_limit'     => 60,
+        'daz_coral_bg_color'         => 70,
+        'daz_coral_text_color'       => 71,
     ];
 
     foreach ($fields as $key => $position) {
@@ -96,7 +93,7 @@ function daz_coral_generate_token()
         return;
     }
 
-    // Step 1 — authenticate via REST (not GraphQL)
+    // Step 1 — authenticate via REST
     $ch = curl_init($domain . '/api/auth/local');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
@@ -114,7 +111,7 @@ function daz_coral_generate_token()
         return;
     }
 
-    // Step 2 — create permanent token via GraphQL (admins bypass persisted query requirement)
+    // Step 2 — create permanent token via GraphQL
     $mutation = 'mutation CreateTokenMutation($name: String!) {
         createToken(input: { clientMutationId: "", name: $name }) {
             token { id name createdAt }
@@ -150,26 +147,101 @@ function daz_coral_generate_token()
 }
 
 // ============================================================
-// ADMIN — PREFERENCES PAGE
+// ADMIN — SHARED CHROME
+// ============================================================
+
+function daz_coral_admin_chrome($active_tab)
+{
+    pagetop('Coral Comments');
+
+    $txp_token = function_exists('form_token') ? form_token() : '';
+    $base_url  = '?event=plugin_prefs.daz_coral_comments';
+
+    $tabs = [
+        'settings' => 'Settings',
+        'help'     => 'Help',
+    ];
+
+    $tab_html = '';
+    foreach ($tabs as $key => $label) {
+        $active    = ($key === $active_tab) ? ' dcc-tab-active' : '';
+        $tab_html .= "<a href=\"{$base_url}&amp;daz_tab={$key}\" class=\"dcc-tab{$active}\">{$label}</a>";
+    }
+
+    echo <<<HTML
+<style>
+  .dcc-admin { max-width:720px; font-family:sans-serif; font-size:.9rem; margin-top:16px; }
+  .dcc-tabs  { display:flex; gap:4px; margin-bottom:24px; border-bottom:2px solid #ddd; padding-bottom:0; }
+  .dcc-tab   { padding:7px 18px; text-decoration:none; color:#555; border-radius:4px 4px 0 0;
+               border:1px solid transparent; margin-bottom:-2px; font-size:.88rem; }
+  .dcc-tab:hover      { background:#f5f5f5; color:#333; }
+  .dcc-tab-active     { background:#fff; border-color:#ddd #ddd #fff; color:#222; font-weight:600; }
+  .dcc-admin h3 { font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; color:#666;
+                  border-bottom:1px solid #eee; padding-bottom:5px; margin:28px 0 14px; }
+  .dcc-admin h3:first-child { margin-top:0; }
+  .dcc-admin label { display:block; font-weight:600; margin-bottom:3px; }
+  .dcc-admin input[type=text],
+  .dcc-admin input[type=password] { width:100%; padding:6px 8px; border:1px solid #ccc;
+                                    border-radius:4px; box-sizing:border-box; margin-bottom:12px; font-size:.88rem; }
+  .dcc-admin .hint  { font-size:.78rem; color:#999; margin:-8px 0 12px; }
+  .dcc-admin .row   { display:flex; gap:16px; }
+  .dcc-admin .row > div { flex:1; min-width:0; }
+  .dcc-admin .btn   { padding:7px 18px; border:none; border-radius:4px; cursor:pointer; font-size:.88rem; }
+  .dcc-admin .btn-save    { background:#4a7c6f; color:#fff; }
+  .dcc-admin .btn-connect { background:#2c5282; color:#fff; }
+  .dcc-admin .btn-revoke  { background:#c00;    color:#fff; margin-left:8px; }
+  .dcc-admin .token-row   { display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+  .dcc-admin .token-preview { font-family:monospace; font-size:.78rem; color:#888; }
+  .dcc-ok   { color:#2a7a2a; font-weight:600; }
+  .dcc-err  { color:#c00;    font-weight:600; }
+  .dcc-warn { color:#a06000; font-weight:600; }
+  .dcc-muted{ color:#999; }
+  /* Help page */
+  .dcc-help h2 { font-size:1rem; margin:24px 0 6px; color:#333; }
+  .dcc-help h2:first-child { margin-top:0; }
+  .dcc-help p  { margin:0 0 10px; color:#444; line-height:1.55; }
+  .dcc-help code { background:#f4f4f4; padding:1px 5px; border-radius:3px; font-size:.85rem; }
+  .dcc-help pre { background:#f4f4f4; padding:12px; border-radius:4px; font-size:.82rem;
+                  overflow-x:auto; margin:0 0 14px; line-height:1.5; }
+  .dcc-help table { width:100%; border-collapse:collapse; margin-bottom:16px; font-size:.85rem; }
+  .dcc-help th { text-align:left; padding:6px 10px; background:#f0f0f0; border-bottom:2px solid #ddd; }
+  .dcc-help td { padding:6px 10px; border-bottom:1px solid #eee; vertical-align:top; }
+  .dcc-help td:first-child { font-family:monospace; white-space:nowrap; color:#2c5282; }
+  .dcc-help .dcc-note { background:#fff8e1; border-left:3px solid #f0a500; padding:10px 14px;
+                        margin-bottom:14px; font-size:.85rem; border-radius:0 4px 4px 0; }
+</style>
+<div class="dcc-admin">
+  <div class="dcc-tabs">{$tab_html}</div>
+HTML;
+
+    return $txp_token;
+}
+
+// ============================================================
+// ADMIN — SETTINGS PAGE
 // ============================================================
 
 function daz_coral_options()
 {
-    $domain        = get_pref('daz_coral_domain',        '');
-    $sso_secret    = get_pref('daz_coral_sso_secret',    '');
-    $photo_path    = get_pref('daz_coral_photo_path',    '');
-    $photo_url     = get_pref('daz_coral_photo_url',     '/membership/photos/');
-    $default_photo = get_pref('daz_coral_default_photo', 'user.jpg');
-    $limit         = get_pref('daz_coral_recent_limit',  '10');
-    $bg_color      = get_pref('daz_coral_bg_color',      '#D9E0DC');
-    $token_status  = get_pref('daz_coral_token_status',  '');
-    $api_token     = get_pref('daz_coral_api_token',     '');
+    $domain       = get_pref('daz_coral_domain',           '');
+    $sso_secret   = get_pref('daz_coral_sso_secret',       '');
+    $sess_user    = get_pref('daz_coral_session_user',     'user');
+    $sess_email   = get_pref('daz_coral_session_email',    'email');
+    $sess_uname   = get_pref('daz_coral_session_username', 'username');
+    $photo_path   = get_pref('daz_coral_photo_path',       '');
+    $photo_url    = get_pref('daz_coral_photo_url',        '/membership/photos/');
+    $def_photo    = get_pref('daz_coral_default_photo',    'user.jpg');
+    $limit        = get_pref('daz_coral_recent_limit',     '10');
+    $bg_color     = get_pref('daz_coral_bg_color',         '#ffffff');
+    $text_color   = get_pref('daz_coral_text_color',       '#000000');
+    $token_status = get_pref('daz_coral_token_status',     '');
+    $api_token    = get_pref('daz_coral_api_token',        '');
 
     $status_messages = [
-        'connected'     => '<span class="dcc-ok">&#10003; Connected</span>',
-        'token_failed'  => '<span class="dcc-err">&#10007; Token creation failed — is this account a Coral admin?</span>',
-        'missing_fields'=> '<span class="dcc-err">&#10007; Domain, email and password are all required</span>',
-        'revoked'       => '<span class="dcc-warn">Token revoked</span>',
+        'connected'      => '<span class="dcc-ok">&#10003; Connected</span>',
+        'token_failed'   => '<span class="dcc-err">&#10007; Token creation failed — is this account a Coral admin?</span>',
+        'missing_fields' => '<span class="dcc-err">&#10007; Domain, email and password are all required</span>',
+        'revoked'        => '<span class="dcc-warn">Token revoked</span>',
     ];
 
     if (strpos($token_status, 'auth_failed') === 0) {
@@ -177,38 +249,12 @@ function daz_coral_options()
     } else {
         $status_html = $status_messages[$token_status] ?? '<span class="dcc-muted">Not connected</span>';
     }
-    $token_preview = $api_token ? substr($api_token, 0, 24) . '&hellip;' : 'None';
 
+    $token_preview          = $api_token ? substr($api_token, 0, 24) . '&hellip;' : 'None';
     $photo_path_placeholder = ($_SERVER['DOCUMENT_ROOT'] ?? '/var/www/html') . '/membership/photos/';
-    $txp_token = function_exists('form_token') ? form_token() : '';
+    $txp_token              = daz_coral_admin_chrome('settings');
 
     echo <<<HTML
-<style>
-  .dcc-admin { max-width:680px; font-family:sans-serif; font-size:.9rem; }
-  .dcc-admin h3 { font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; color:#666;
-                  border-bottom:1px solid #ddd; padding-bottom:5px; margin:28px 0 14px; }
-  .dcc-admin h3:first-child { margin-top:0; }
-  .dcc-admin label { display:block; font-weight:600; margin-bottom:3px; }
-  .dcc-admin input[type=text],
-  .dcc-admin input[type=password] { width:100%; padding:6px 8px; border:1px solid #ccc;
-                                     border-radius:4px; box-sizing:border-box; margin-bottom:12px; font-size:.88rem; }
-  .dcc-admin .hint { font-size:.78rem; color:#999; margin:-8px 0 12px; }
-  .dcc-admin .row { display:flex; gap:16px; }
-  .dcc-admin .row > div { flex:1; min-width:0; }
-  .dcc-admin .btn { padding:7px 18px; border:none; border-radius:4px; cursor:pointer; font-size:.88rem; }
-  .dcc-admin .btn-save { background:#4a7c6f; color:#fff; }
-  .dcc-admin .btn-connect { background:#2c5282; color:#fff; }
-  .dcc-admin .btn-revoke { background:#c00; color:#fff; margin-left:8px; }
-  .dcc-admin .token-row { display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
-  .dcc-admin .token-status { font-size:.88rem; }
-  .dcc-admin .token-preview { font-family:monospace; font-size:.78rem; color:#888; }
-  .dcc-ok   { color:#2a7a2a; font-weight:600; }
-  .dcc-err  { color:#c00;    font-weight:600; }
-  .dcc-warn { color:#a06000; font-weight:600; }
-  .dcc-muted{ color:#999; }
-</style>
-
-<div class="dcc-admin">
 
   <!-- ── Settings ───────────────────────────────────────── -->
   <form method="post">
@@ -224,16 +270,39 @@ function daz_coral_options()
     <input type="text" name="daz_coral_sso_secret" value="{$sso_secret}" placeholder="ssosec_… or the hex string after the prefix">
     <p class="hint">Copy the full key from Coral admin &rarr; Configure &rarr; Auth &rarr; Single Sign-On. The <code>ssosec_</code> prefix is stripped automatically.</p>
 
+    <h3>Session Keys</h3>
+    <p class="hint" style="margin-top:-8px">The PHP <code>$_SESSION</code> variable names your site uses for the logged-in user.</p>
+
+    <div class="row">
+      <div>
+        <label>User ID key</label>
+        <input type="text" name="daz_coral_session_user" value="{$sess_user}" placeholder="user">
+      </div>
+      <div>
+        <label>Email key</label>
+        <input type="text" name="daz_coral_session_email" value="{$sess_email}" placeholder="email">
+      </div>
+      <div>
+        <label>Username key</label>
+        <input type="text" name="daz_coral_session_username" value="{$sess_uname}" placeholder="username">
+      </div>
+    </div>
+
     <h3>Recent Comments Display</h3>
 
     <div class="row">
       <div>
-        <label>Number of comments to show</label>
+        <label>Default number of comments</label>
         <input type="text" name="daz_coral_recent_limit" value="{$limit}">
+        <p class="hint">Can be overridden per tag with <code>limit=""</code>.</p>
       </div>
       <div>
-        <label>Panel background colour</label>
-        <input type="text" name="daz_coral_bg_color" value="{$bg_color}" placeholder="#D9E0DC">
+        <label>Background colour</label>
+        <input type="text" name="daz_coral_bg_color" value="{$bg_color}" placeholder="#ffffff">
+      </div>
+      <div>
+        <label>Text colour</label>
+        <input type="text" name="daz_coral_text_color" value="{$text_color}" placeholder="#000000">
       </div>
     </div>
 
@@ -247,8 +316,8 @@ function daz_coral_options()
     <input type="text" name="daz_coral_photo_url" value="{$photo_url}" placeholder="/membership/photos/">
 
     <label>Default photo filename</label>
-    <input type="text" name="daz_coral_default_photo" value="{$default_photo}" placeholder="user.jpg">
-    <p class="hint">Used when no photo exists for a user.</p>
+    <input type="text" name="daz_coral_default_photo" value="{$def_photo}" placeholder="user.jpg">
+    <p class="hint">Shown when no photo exists for a user.</p>
 
     <button type="submit" class="btn btn-save">Save settings</button>
   </form>
@@ -262,7 +331,7 @@ function daz_coral_options()
     <h3>API Token</h3>
 
     <div class="token-row">
-      <div class="token-status">{$status_html}</div>
+      <div>{$status_html}</div>
       <div class="token-preview">Token: {$token_preview}</div>
     </div>
 
@@ -279,15 +348,12 @@ function daz_coral_options()
     <p class="hint">Credentials are used once to generate the token and are never stored.</p>
 
     <button type="submit" class="btn btn-connect">Generate API token</button>
-
-    <!-- Revoke button (separate form so it doesn't need credentials) -->
-    <span style="display:inline-block;">
 HTML;
 
-    echo '</span></form>';
+    echo '</form>';
 
     if ($api_token) {
-        echo '<form method="post" style="display:inline;">
+        echo '<form method="post" style="margin-top:8px;">
             <input type="hidden" name="daz_coral_action" value="revoke_token">
             <input type="hidden" name="_txp_token" value="' . (function_exists('form_token') ? form_token() : '') . '">
             <button type="submit" class="btn btn-revoke" onclick="return confirm(\'Revoke the stored token?\')">Revoke token</button>
@@ -298,13 +364,144 @@ HTML;
 }
 
 // ============================================================
+// ADMIN — HELP PAGE
+// ============================================================
+
+function daz_coral_help_page()
+{
+    daz_coral_admin_chrome('help');
+
+    echo <<<HTML
+<div class="dcc-help">
+
+  <h2>Overview</h2>
+  <p>daz_coral_comments integrates the <a href="https://coralproject.net" target="_blank">Coral Project</a> commenting system with Textpattern. It provides three tags: a comment embed with automatic Single Sign-On, a recent comments panel, and a comment count display.</p>
+
+  <div class="dcc-note">Before any tag works you must set the <strong>Coral domain</strong> and <strong>SSO secret key</strong> in Settings. To use the recent comments panel you also need to generate an <strong>API token</strong>.</div>
+
+  <h2>&lt;txp:daz_coral_embed /&gt;</h2>
+  <p>Renders the Coral comment thread on any page. If the current visitor is logged in, they are signed into Coral automatically using Single Sign-On — no separate Coral account or login required.</p>
+
+  <pre>&lt;txp:daz_coral_embed /&gt;</pre>
+
+  <table>
+    <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
+    <tr>
+      <td>session_user</td>
+      <td><em>Settings value</em></td>
+      <td>The <code>$_SESSION</code> key that holds the logged-in user's ID.</td>
+    </tr>
+    <tr>
+      <td>session_email</td>
+      <td><em>Settings value</em></td>
+      <td>The <code>$_SESSION</code> key that holds the user's email address.</td>
+    </tr>
+    <tr>
+      <td>session_username</td>
+      <td><em>Settings value</em></td>
+      <td>The <code>$_SESSION</code> key that holds the display name shown on comments.</td>
+    </tr>
+  </table>
+
+  <p>Place this tag once per article page, where you want the comment thread to appear.</p>
+
+  <h2>&lt;txp:daz_coral_recent /&gt;</h2>
+  <p>Renders a styled panel showing the most recent approved comments from across your entire site, with user avatars, usernames, dates, and links back to the originating article.</p>
+
+  <pre>&lt;txp:daz_coral_recent /&gt;
+&lt;txp:daz_coral_recent limit="5" /&gt;
+&lt;txp:daz_coral_recent text="Latest Discussion" /&gt;
+&lt;txp:daz_coral_recent text="" /&gt;</pre>
+
+  <table>
+    <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
+    <tr>
+      <td>limit</td>
+      <td><em>Settings value (10)</em></td>
+      <td>Number of comments to show. Overrides the default set in plugin settings.</td>
+    </tr>
+    <tr>
+      <td>text</td>
+      <td>Recent Comments</td>
+      <td>Heading text for the panel. Set to <code>text=""</code> to suppress the heading entirely. If omitted, shows "Recent Comments" with no icon.</td>
+    </tr>
+    <tr>
+      <td>bg_color</td>
+      <td><em>Settings value (#ffffff)</em></td>
+      <td>Panel background colour. Accepts any CSS colour value.</td>
+    </tr>
+    <tr>
+      <td>text_color</td>
+      <td><em>Settings value (#000000)</em></td>
+      <td>Primary text colour for usernames and comment bodies.</td>
+    </tr>
+    <tr>
+      <td>debug</td>
+      <td>0</td>
+      <td>Set to <code>debug="1"</code> to show a diagnostic panel instead of comments. Useful for troubleshooting. Remove before going live.</td>
+    </tr>
+  </table>
+
+  <div class="dcc-note">Only approved comments appear. Pending, rejected, or spam-flagged comments are not shown. Requires a valid API token.</div>
+
+  <h2>&lt;txp:daz_coral_count /&gt;</h2>
+  <p>Displays the number of approved comments for a given URL. Uses Coral's lightweight <code>count.js</code> script — no API token required.</p>
+
+  <pre>&lt;txp:daz_coral_count /&gt;
+&lt;txp:daz_coral_count url="https://example.com/article/" /&gt;
+&lt;txp:daz_coral_count notext="1" /&gt;</pre>
+
+  <table>
+    <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
+    <tr>
+      <td>url</td>
+      <td><em>Current page URL</em></td>
+      <td>The story URL to count comments for. If omitted, Coral infers from the page's canonical URL.</td>
+    </tr>
+    <tr>
+      <td>notext</td>
+      <td>0</td>
+      <td>Set to <code>notext="1"</code> to show the number only, without the word "Comments".</td>
+    </tr>
+  </table>
+
+  <h2>Initial Setup</h2>
+  <p><strong>1. Coral domain</strong> — The full URL of your Coral installation, e.g. <code>https://comments.example.com</code>. No trailing slash.</p>
+  <p><strong>2. SSO secret key</strong> — Found in your Coral admin panel under Configure &rarr; Auth &rarr; Single Sign-On. Copy the full key including the <code>ssosec_</code> prefix — the plugin strips it automatically.</p>
+  <p><strong>3. Session keys</strong> — The names of the <code>$_SESSION</code> variables your site sets when a user logs in. These must match exactly. Common values are <code>user</code>, <code>email</code>, and <code>username</code>.</p>
+  <p><strong>4. API token</strong> — Required for the recent comments panel. Enter your Coral admin email and password and click Generate. The credentials are used once and never stored. The resulting token does not expire.</p>
+  <p><strong>5. User avatars</strong> — If your site stores profile photos on the server, set the server path and web URL so the plugin can find them. Set the default photo filename for users without a photo.</p>
+
+  <h2>Session Key Troubleshooting</h2>
+  <p>If logged-in users are not being signed into Coral automatically, the session keys are the most likely cause. Add a temporary debug line to a TXP page or form to inspect your session:</p>
+  <pre>&lt;txp:php&gt;
+echo '&lt;!-- SESSION: ' . print_r(\$_SESSION, true) . ' --&gt;';
+&lt;/txp:php&gt;</pre>
+  <p>View the page source to see what keys your site uses, then update the Session Keys section in Settings to match.</p>
+
+  <h2>Styling</h2>
+  <p>The recent comments panel uses the CSS classes <code>dcc-panel</code>, <code>dcc-item</code>, <code>dcc-username</code>, <code>dcc-body</code>, <code>dcc-date</code>, and <code>dcc-link</code>. You can override any of these in your site's stylesheet. Background and text colours can also be set per tag or in plugin settings.</p>
+
+  <h2>Requirements</h2>
+  <ul style="color:#444;line-height:1.8;font-size:.88rem;">
+    <li>Textpattern 4.8 or later</li>
+    <li>PHP 7.4 or later with the <code>curl</code> extension enabled</li>
+    <li>A running Coral installation (tested with Coral 7)</li>
+    <li>The plugin set to <strong>Front and back</strong> in the Textpattern plugin list</li>
+  </ul>
+
+</div>
+</div>
+HTML;
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 
 function daz_coral_get_secret()
 {
     $raw = get_pref('daz_coral_sso_secret', '');
-    // Strip ssosec_ prefix if present
     if (strpos($raw, 'ssosec_') === 0) {
         $raw = substr($raw, 7);
     }
@@ -396,22 +593,21 @@ function daz_coral_api($query, $variables = [])
  * <txp:daz_coral_embed />
  *
  * Attributes:
- *   session_user      — $_SESSION key holding the user ID    (default: 'user')
- *   session_email     — $_SESSION key holding the email      (default: 'email')
- *   session_username  — $_SESSION key holding the username   (default: 'username')
+ *   session_user      — $_SESSION key for user ID   (default from settings)
+ *   session_email     — $_SESSION key for email     (default from settings)
+ *   session_username  — $_SESSION key for username  (default from settings)
  */
 function daz_coral_embed($atts)
 {
     extract(lAtts([
-        'session_user'     => 'user',
-        'session_email'    => 'email',
-        'session_username' => 'username',
+        'session_user'     => get_pref('daz_coral_session_user',     'user'),
+        'session_email'    => get_pref('daz_coral_session_email',    'email'),
+        'session_username' => get_pref('daz_coral_session_username', 'username'),
     ], $atts));
 
     $domain = rtrim(get_pref('daz_coral_domain', ''), '/');
     if (!$domain) return '';
 
-    $token           = null;
     $access_token_js = '';
 
     if (!empty($_SESSION[$session_user])) {
@@ -420,10 +616,9 @@ function daz_coral_embed($atts)
             $_SESSION[$session_email]    ?? '',
             $_SESSION[$session_username] ?? ''
         );
-    }
-
-    if ($token) {
-        $access_token_js = "accessToken: '" . $token . "',";
+        if ($token) {
+            $access_token_js = "accessToken: '" . $token . "',";
+        }
     }
 
     return <<<HTML
@@ -465,7 +660,7 @@ function daz_coral_count($atts)
     $domain = rtrim(get_pref('daz_coral_domain', ''), '/');
     if (!$domain) return '';
 
-    $data_url    = $url    ? ' data-coral-url="'  . txpspecialchars($url) . '"' : '';
+    $data_url    = $url ? ' data-coral-url="' . txpspecialchars($url) . '"' : '';
     $data_notext = ($notext === '1') ? ' data-coral-notext="true"' : '';
 
     return <<<HTML
@@ -478,15 +673,21 @@ HTML;
  * <txp:daz_coral_recent />
  *
  * Attributes:
- *   limit    — number of comments (overrides admin setting)
- *   bg_color — panel background colour (overrides admin setting)
+ *   limit      — number of comments (overrides settings default)
+ *   text       — panel heading; omit for "Recent Comments", set to "" to hide heading
+ *   bg_color   — panel background colour (overrides settings default)
+ *   text_color — primary text colour (overrides settings default)
+ *   debug      — set to "1" to show diagnostic output instead of comments
  */
 function daz_coral_recent($atts)
 {
+    // Use a sentinel to detect whether text was explicitly provided
     extract(lAtts([
-        'limit'    => get_pref('daz_coral_recent_limit', 10),
-        'bg_color' => get_pref('daz_coral_bg_color', '#D9E0DC'),
-        'debug'    => '0',
+        'limit'      => get_pref('daz_coral_recent_limit', 10),
+        'text'       => '__default__',
+        'bg_color'   => get_pref('daz_coral_bg_color',   '#ffffff'),
+        'text_color' => get_pref('daz_coral_text_color', '#000000'),
+        'debug'      => '0',
     ], $atts));
 
     $limit = (int) $limit;
@@ -496,9 +697,11 @@ function daz_coral_recent($atts)
         $token  = get_pref('daz_coral_api_token', '');
         return '<pre style="background:#ffc;padding:10px;font-size:.8rem">'
             . 'daz_coral_recent debug' . "\n"
-            . 'Domain: ' . txpspecialchars($domain) . "\n"
-            . 'Token: '  . ($token ? substr($token, 0, 20) . '...' : '(not set)') . "\n"
-            . 'Limit: '  . $limit . "\n"
+            . 'Domain: '     . txpspecialchars($domain) . "\n"
+            . 'Token: '      . ($token ? substr($token, 0, 20) . '...' : '(not set)') . "\n"
+            . 'Limit: '      . $limit . "\n"
+            . 'bg_color: '   . txpspecialchars($bg_color) . "\n"
+            . 'text_color: ' . txpspecialchars($text_color) . "\n"
             . '</pre>';
     }
 
@@ -519,6 +722,8 @@ function daz_coral_recent($atts)
 
     if (!$comments) return '';
 
+    // Derive secondary colours from primary text colour at reduced opacity via rgba
+    // For simplicity we darken/lighten using hex — just use semi-transparent versions
     $default_avatar = txpspecialchars(
         rtrim(get_pref('daz_coral_photo_url', '/membership/photos/'), '/') . '/' .
         get_pref('daz_coral_default_photo', 'user.jpg')
@@ -527,22 +732,28 @@ function daz_coral_recent($atts)
     $out = <<<CSS
 <style>
 .dcc-panel{background:{$bg_color};border-radius:12px;padding:20px 24px}
-.dcc-panel h5{color:#2c3e35;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:.92rem;margin-bottom:18px;padding-bottom:10px;border-bottom:2px solid #b5c2bc}
-.dcc-item{padding:12px 0;border-bottom:1px solid #c4cec9;transition:opacity .2s}
+.dcc-panel h5{color:{$text_color};font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:.92rem;margin-bottom:18px;padding-bottom:10px;border-bottom:2px solid rgba(0,0,0,.12)}
+.dcc-item{padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08);transition:opacity .2s}
 .dcc-item:last-child{border-bottom:none;padding-bottom:0}
-.dcc-item:hover{opacity:.85}
+.dcc-item:hover{opacity:.8}
 .dcc-item-top{display:flex;gap:12px}
-.dcc-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #b5c2bc;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.dcc-username{font-weight:700;font-size:1.05rem;color:#2c3e35}
-.dcc-date{font-size:.88rem;color:#7a9089;margin-left:6px}
-.dcc-body{font-size:1rem;color:#3a4f47;margin:4px 0 0;line-height:1.45}
-.dcc-link{font-size:.88rem;color:#5a8078;text-decoration:none;font-style:italic;margin-top:6px;display:block}
-.dcc-link:hover{color:#2c3e35;text-decoration:underline}
+.dcc-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.dcc-username{font-weight:700;font-size:1.05rem;color:{$text_color}}
+.dcc-date{font-size:.88rem;color:{$text_color};opacity:.5;margin-left:6px}
+.dcc-body{font-size:1rem;color:{$text_color};opacity:.85;margin:4px 0 0;line-height:1.45}
+.dcc-link{font-size:.88rem;color:{$text_color};opacity:.6;text-decoration:none;font-style:italic;margin-top:6px;display:block}
+.dcc-link:hover{opacity:1;text-decoration:underline}
 </style>
 CSS;
 
+    // Heading
     $out .= '<div class="dcc-panel">';
-    $out .= '<h5><i class="fas fa-comments me-2"></i>Recent Comments</h5>';
+    if ($text === '__default__') {
+        $out .= '<h5>Recent Comments</h5>';
+    } elseif ($text !== '') {
+        $out .= '<h5>' . txpspecialchars($text) . '</h5>';
+    }
+    // $text === '' means no heading at all
 
     foreach ($comments as $comment) {
         $username = $comment['author']['username'] ?? null;
@@ -564,17 +775,17 @@ CSS;
         $out .= "<span class=\"dcc-date\">{$date}</span>";
         $out .= "<div class=\"dcc-body\">{$body}</div>";
         $out .= '</div>';
-        $out .= '</div>'; // .dcc-item-top
+        $out .= '</div>';
 
         if ($title) {
             $t    = txpspecialchars($title);
             $out .= "<a href=\"{$url}\" class=\"dcc-link\"><i class=\"fas fa-arrow-right me-1\"></i>{$t}</a>";
         }
 
-        $out .= '</div>'; // .dcc-item
+        $out .= '</div>';
     }
 
-    $out .= '</div>'; // .dcc-panel
+    $out .= '</div>';
 
     return $out;
 }

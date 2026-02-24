@@ -75,11 +75,15 @@ function daz_coral_save_prefs()
         'daz_coral_recent_limit'     => 60,
         'daz_coral_bg_color'         => 70,
         'daz_coral_text_color'       => 71,
+        'daz_coral_show_photos'      => 72,
     ];
 
     foreach ($fields as $key => $position) {
         set_pref($key, ps($key), 'daz_coral_comments', 1, 'text_input', $position);
     }
+
+    // Checkbox — only present in POST when checked, so handle explicitly
+    set_pref('daz_coral_show_photos', ps('daz_coral_show_photos') ? '1' : '0', 'daz_coral_comments', 1, 'text_input', 72);
 }
 
 function daz_coral_generate_token()
@@ -234,6 +238,7 @@ function daz_coral_options()
     $limit        = get_pref('daz_coral_recent_limit',     '10');
     $bg_color     = get_pref('daz_coral_bg_color',         '#ffffff');
     $text_color   = get_pref('daz_coral_text_color',       '#000000');
+    $show_photos  = get_pref('daz_coral_show_photos',      '1');
     $token_status = get_pref('daz_coral_token_status',     '');
     $api_token    = get_pref('daz_coral_api_token',        '');
 
@@ -252,6 +257,7 @@ function daz_coral_options()
 
     $token_preview          = $api_token ? substr($api_token, 0, 24) . '&hellip;' : 'None';
     $photo_path_placeholder = ($_SERVER['DOCUMENT_ROOT'] ?? '/var/www/html') . '/membership/photos/';
+    $photos_checked         = ($show_photos === '1') ? ' checked' : '';
     $txp_token              = daz_coral_admin_chrome('settings');
 
     echo <<<HTML
@@ -305,6 +311,11 @@ function daz_coral_options()
         <input type="text" name="daz_coral_text_color" value="{$text_color}" placeholder="#000000">
       </div>
     </div>
+    <label>
+      <input type="checkbox" name="daz_coral_show_photos" value="1"{$photos_checked}>
+      Show user profile photos
+    </label>
+    <p class="hint">When unchecked, no filesystem checks or image requests are made.</p>
 
     <h3>User Avatars</h3>
 
@@ -434,6 +445,11 @@ function daz_coral_help_page()
       <td>text_color</td>
       <td><em>Settings value (#000000)</em></td>
       <td>Primary text colour for usernames and comment bodies.</td>
+    </tr>
+    <tr>
+      <td>photos</td>
+      <td><em>Settings value (1)</em></td>
+      <td>Set to <code>photos="0"</code> to hide avatars entirely. No filesystem checks or image requests are made. Overrides the setting.</td>
     </tr>
     <tr>
       <td>debug</td>
@@ -687,6 +703,7 @@ function daz_coral_recent($atts)
         'text'       => '__default__',
         'bg_color'   => get_pref('daz_coral_bg_color',   '#ffffff'),
         'text_color' => get_pref('daz_coral_text_color', '#000000'),
+        'photos'     => get_pref('daz_coral_show_photos', '1'),
         'debug'      => '0',
     ], $atts));
 
@@ -760,7 +777,6 @@ CSS;
         if (!$username) continue;
 
         $user_id = $comment['author']['id'] ?? null;
-        $avatar  = txpspecialchars(daz_coral_avatar($user_id));
         $body    = txpspecialchars(trim(strip_tags($comment['body'])));
         $title   = $comment['story']['metadata']['title'] ?? null;
         $url     = txpspecialchars($comment['story']['url']);
@@ -769,7 +785,10 @@ CSS;
 
         $out .= '<div class="dcc-item">';
         $out .= '<div class="dcc-item-top">';
-        $out .= "<img src=\"{$avatar}\" alt=\"{$name}\" class=\"dcc-avatar\" onerror=\"this.src='{$default_avatar}'\">";
+        if ($photos !== '0') {
+            $avatar = txpspecialchars(daz_coral_avatar($user_id));
+            $out .= "<img src=\"{$avatar}\" alt=\"{$name}\" class=\"dcc-avatar\" onerror=\"this.src='{$default_avatar}'\">";
+        }
         $out .= '<div style="min-width:0;flex:1">';
         $out .= "<span class=\"dcc-username\">{$name}</span>";
         $out .= "<span class=\"dcc-date\">{$date}</span>";

@@ -104,7 +104,8 @@ function daz_coral_generate_token()
     curl_close($ch);
 
     if (empty($auth['token'])) {
-        set_pref('daz_coral_token_status', 'auth_failed', 'daz_coral_comments', 1, 'text_input', 80);
+        $detail = isset($auth['error']['message']) ? $auth['error']['message'] : 'no token in response';
+        set_pref('daz_coral_token_status', 'auth_failed: ' . $detail, 'daz_coral_comments', 1, 'text_input', 80);
         return;
     }
 
@@ -161,16 +162,20 @@ function daz_coral_options()
 
     $status_messages = [
         'connected'     => '<span class="dcc-ok">&#10003; Connected</span>',
-        'auth_failed'   => '<span class="dcc-err">&#10007; Authentication failed — check email and password</span>',
         'token_failed'  => '<span class="dcc-err">&#10007; Token creation failed — is this account a Coral admin?</span>',
         'missing_fields'=> '<span class="dcc-err">&#10007; Domain, email and password are all required</span>',
         'revoked'       => '<span class="dcc-warn">Token revoked</span>',
     ];
 
-    $status_html   = $status_messages[$token_status] ?? '<span class="dcc-muted">Not connected</span>';
+    if (strpos($token_status, 'auth_failed') === 0) {
+        $status_html = '<span class="dcc-err">&#10007; Authentication failed — ' . txpspecialchars(substr($token_status, 12)) . '</span>';
+    } else {
+        $status_html = $status_messages[$token_status] ?? '<span class="dcc-muted">Not connected</span>';
+    }
     $token_preview = $api_token ? substr($api_token, 0, 24) . '&hellip;' : 'None';
 
     $photo_path_placeholder = ($_SERVER['DOCUMENT_ROOT'] ?? '/var/www/html') . '/membership/photos/';
+    $txp_token = function_exists('form_token') ? form_token() : '';
 
     echo <<<HTML
 <style>
@@ -203,6 +208,7 @@ function daz_coral_options()
   <!-- ── Settings ───────────────────────────────────────── -->
   <form method="post">
     <input type="hidden" name="daz_coral_action" value="save_prefs">
+    <input type="hidden" name="_txp_token" value="{$txp_token}">
 
     <h3>Connection</h3>
 
@@ -246,6 +252,7 @@ function daz_coral_options()
   <form method="post">
     <input type="hidden" name="daz_coral_action" value="generate_token">
     <input type="hidden" name="daz_coral_domain" value="{$domain}">
+    <input type="hidden" name="_txp_token" value="{$txp_token}">
 
     <h3>API Token</h3>
 
@@ -277,6 +284,7 @@ HTML;
     if ($api_token) {
         echo '<form method="post" style="display:inline;">
             <input type="hidden" name="daz_coral_action" value="revoke_token">
+            <input type="hidden" name="_txp_token" value="' . (function_exists('form_token') ? form_token() : '') . '">
             <button type="submit" class="btn btn-revoke" onclick="return confirm(\'Revoke the stored token?\')">Revoke token</button>
           </form>';
     }

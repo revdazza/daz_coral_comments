@@ -105,7 +105,7 @@ function daz_coral_generate_token()
 
     if (empty($auth['token'])) {
         $detail = isset($auth['error']['message']) ? $auth['error']['message'] : 'no token in response';
-        set_pref('daz_coral_token_status', 'auth_failed: ' . $detail, 'daz_coral_comments', 1, 'text_input', 80);
+        set_pref('daz_coral_token_status', 'auth_failed: ' . substr($detail, 0, 200), 'daz_coral_comments', 1, 'text_input', 80);
         return;
     }
 
@@ -481,9 +481,21 @@ function daz_coral_recent($atts)
     extract(lAtts([
         'limit'    => get_pref('daz_coral_recent_limit', 10),
         'bg_color' => get_pref('daz_coral_bg_color', '#D9E0DC'),
+        'debug'    => '0',
     ], $atts));
 
     $limit = (int) $limit;
+
+    if ($debug === '1') {
+        $domain = get_pref('daz_coral_domain', '(not set)');
+        $token  = get_pref('daz_coral_api_token', '');
+        return '<pre style="background:#ffc;padding:10px;font-size:.8rem">'
+            . 'daz_coral_recent debug' . "\n"
+            . 'Domain: ' . txpspecialchars($domain) . "\n"
+            . 'Token: '  . ($token ? substr($token, 0, 20) . '...' : '(not set)') . "\n"
+            . 'Limit: '  . $limit . "\n"
+            . '</pre>';
+    }
 
     $query = "{
         comments(first: {$limit}, orderBy: CREATED_AT_DESC) {

@@ -32,19 +32,20 @@ if (class_exists('\Textpattern\Tag\Registry')) {
 
 if (@txpinterface === 'admin') {
     add_privs('plugin_prefs.daz_coral_comments', '1,2');
-    register_callback('daz_coral_prefs_page', 'plugin_prefs.daz_coral_comments');
-    register_callback('daz_coral_install_help', 'plugin_lifecycle.daz_coral_comments');
+    register_callback('daz_coral_prefs_page',   'plugin_prefs.daz_coral_comments');
+    register_callback('daz_coral_ensure_help',  'admin_side', 'head');
 }
 
-function daz_coral_install_help($event, $step)
+function daz_coral_ensure_help()
 {
-    if ($step !== 'enabled') return;
-
-    safe_update(
-        'txp_plugin',
-        "help = '" . doSlash('<p>See the <strong>Help</strong> tab within the plugin Options page for full documentation.</p>') . "'",
-        "name = 'daz_coral_comments'"
-    );
+    $row = safe_row('help', 'txp_plugin', "name = 'daz_coral_comments'");
+    if ($row && empty($row['help'])) {
+        safe_update(
+            'txp_plugin',
+            "help = '" . doSlash('<p>See the <strong>Help</strong> tab within the plugin Options page for full documentation of all tags, attributes, and settings.</p>') . "'",
+            "name = 'daz_coral_comments'"
+        );
+    }
 }
 
 // ============================================================
@@ -289,7 +290,7 @@ function daz_coral_options()
     <p class="hint">Copy the full key from Coral admin &rarr; Configure &rarr; Auth &rarr; Single Sign-On. The <code>ssosec_</code> prefix is stripped automatically.</p>
 
     <h3>Session Keys</h3>
-    <p class="hint" style="margin-top:-8px">The PHP <code>$_SESSION</code> variable names your site sets when a user logs in.</p>
+    <p class="hint" style="margin-top:-8px">The PHP <code>\$_SESSION</code> variable names your site sets when a user logs in.</p>
 
     <div class="row">
       <div>
@@ -403,30 +404,11 @@ function daz_coral_help_page()
   <div class="dcc-note">Before any tag works you must set the <strong>Coral domain</strong> and <strong>SSO secret key</strong> in Settings. To use the recent comments panel you also need to generate an <strong>API token</strong>.</div>
 
   <h2>&lt;txp:daz_coral_embed /&gt;</h2>
-  <p>Renders the Coral comment thread on any page. If the current visitor is logged in, they are signed into Coral automatically using Single Sign-On — no separate Coral account or login required.</p>
+  <p>Renders the Coral comment thread on any page. If the current visitor is logged in, they are signed into Coral automatically using Single Sign-On — no separate Coral account or login required. Session key names are configured in Settings (see Initial Setup below).</p>
 
   <pre>&lt;txp:daz_coral_embed /&gt;</pre>
 
-  <table>
-    <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
-    <tr>
-      <td>session_user</td>
-      <td><em>Settings value</em></td>
-      <td>The <code>$_SESSION</code> key that holds the logged-in user's ID.</td>
-    </tr>
-    <tr>
-      <td>session_email</td>
-      <td><em>Settings value</em></td>
-      <td>The <code>$_SESSION</code> key that holds the user's email address.</td>
-    </tr>
-    <tr>
-      <td>session_username</td>
-      <td><em>Settings value</em></td>
-      <td>The <code>$_SESSION</code> key that holds the display name shown on comments.</td>
-    </tr>
-  </table>
-
-  <p>Place this tag once per article page, where you want the comment thread to appear.</p>
+  <p>Place this tag once per article page, where you want the comment thread to appear. No attributes are normally needed.</p>
 
   <h2>&lt;txp:daz_coral_recent /&gt;</h2>
   <p>Renders a styled panel showing the most recent approved comments from across your entire site, with user avatars, usernames, dates, and links back to the originating article.</p>
@@ -496,16 +478,35 @@ function daz_coral_help_page()
   <h2>Initial Setup</h2>
   <p><strong>1. Coral domain</strong> — The full URL of your Coral installation, e.g. <code>https://comments.example.com</code>. No trailing slash.</p>
   <p><strong>2. SSO secret key</strong> — Found in your Coral admin panel under Configure &rarr; Auth &rarr; Single Sign-On. Copy the full key including the <code>ssosec_</code> prefix — the plugin strips it automatically.</p>
-  <p><strong>3. Session keys</strong> — The names of the <code>$_SESSION</code> variables your site sets when a user logs in. These must match exactly what your authentication system uses. Common values are <code>user</code>, <code>email</code>, and <code>username</code>.</p>
-  <p><strong>4. API token</strong> — Required for the recent comments panel. Enter your Coral admin email and password and click Generate. The credentials are used once and never stored. The resulting token does not expire.</p>
-  <p><strong>5. User avatars</strong> — If your site stores profile photos on the server, set the server path and web URL so the plugin can find them. Set the default photo filename for users without a photo.</p>
 
-  <h2>Session Key Troubleshooting</h2>
-  <p>If logged-in users are not being signed into Coral automatically, the session keys are the most likely cause. Add a temporary debug line to a TXP page or form to inspect your session:</p>
+  <p><strong>3. Session keys</strong> — For Single Sign-On to work, the plugin needs to read the currently logged-in user's details from PHP's <code>\$_SESSION</code> array. You must tell the plugin which keys your site uses. Set these three values in Settings to match what your authentication system writes when a user logs in:</p>
+
+  <table>
+    <tr><th>Setting</th><th>Default</th><th>What it should contain</th></tr>
+    <tr>
+      <td>User ID key</td>
+      <td>user</td>
+      <td>The unique numeric or string ID for the logged-in user — e.g. <code>\$_SESSION['user']</code></td>
+    </tr>
+    <tr>
+      <td>Email key</td>
+      <td>email</td>
+      <td>The user's email address — e.g. <code>\$_SESSION['email']</code></td>
+    </tr>
+    <tr>
+      <td>Username key</td>
+      <td>username</td>
+      <td>The display name shown on comments — e.g. <code>\$_SESSION['username']</code></td>
+    </tr>
+  </table>
+
+  <p>If you are not sure what keys your site uses, add this temporarily to any TXP page and view the HTML source:</p>
   <pre>&lt;txp:php&gt;
 echo '&lt;!-- SESSION: ' . print_r(\$_SESSION, true) . ' --&gt;';
 &lt;/txp:php&gt;</pre>
-  <p>View the page source to see what keys your site uses, then update the Session Keys section in Settings to match.</p>
+
+  <p><strong>4. API token</strong> — Required for the recent comments panel. Enter your Coral admin email and password and click Generate. The credentials are used once and never stored. The resulting token does not expire.</p>
+  <p><strong>5. User avatars</strong> — If your site stores profile photos on the server, set the server path and web URL so the plugin can find them. Set the default photo filename for users without a photo.</p>
 
   <h2>Styling</h2>
   <p>All elements in the recent comments panel carry CSS classes you can override in your site stylesheet. Background and text colours can also be set per tag or in plugin settings.</p>

@@ -496,7 +496,19 @@ echo '&lt;!-- SESSION: ' . print_r(\$_SESSION, true) . ' --&gt;';
   <p>View the page source to see what keys your site uses, then update the Session Keys section in Settings to match.</p>
 
   <h2>Styling</h2>
-  <p>The recent comments panel uses the CSS classes <code>dcc-panel</code>, <code>dcc-item</code>, <code>dcc-username</code>, <code>dcc-body</code>, <code>dcc-date</code>, and <code>dcc-link</code>. You can override any of these in your site's stylesheet. Background and text colours can also be set per tag or in plugin settings.</p>
+  <p>All elements in the recent comments panel carry CSS classes you can override in your site stylesheet. Background and text colours can also be set per tag or in plugin settings.</p>
+  <table>
+    <tr><th>Class</th><th>Element</th></tr>
+    <tr><td>.dcc-panel</td><td>Outer container</td></tr>
+    <tr><td>.dcc-panel h5</td><td>Panel heading</td></tr>
+    <tr><td>.dcc-item</td><td>Individual comment row</td></tr>
+    <tr><td>.dcc-item-top</td><td>Flex row containing avatar and text</td></tr>
+    <tr><td>.dcc-avatar</td><td>Profile photo</td></tr>
+    <tr><td>.dcc-username</td><td>Commenter display name</td></tr>
+    <tr><td>.dcc-date</td><td>Comment date</td></tr>
+    <tr><td>.dcc-body</td><td>Comment text</td></tr>
+    <tr><td>.dcc-link</td><td>Link to originating article</td></tr>
+  </table>
 
   <h2>Requirements</h2>
   <ul style="color:#444;line-height:1.8;font-size:.88rem;">

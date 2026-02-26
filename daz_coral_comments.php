@@ -705,7 +705,8 @@ HTML;
     $approved_result = daz_coral_api('{
         comments(first: 20, orderBy: CREATED_AT_DESC) {
             nodes {
-                id body createdAt
+                id body createdAt status
+                revision { id }
                 author { username }
                 story { url metadata { title } }
             }
@@ -713,7 +714,10 @@ HTML;
     }');
 
     $queues   = $mod_result['data']['moderationQueues']    ?? null;
-    $approved = $approved_result['data']['comments']['nodes'] ?? [];
+    $all_comments = $approved_result['data']['comments']['nodes'] ?? [];
+    $approved = array_values(array_filter($all_comments, function ($c) {
+        return ($c['status'] ?? '') === 'APPROVED';
+    }));
 
     $pending_count  = (int) ($queues['unmoderated']['count'] ?? 0);
     $reported_count = (int) ($queues['reported']['count']    ?? 0);
@@ -797,19 +801,32 @@ HTML;
         echo '<p class="dcc-mod-empty">No approved comments yet.</p>';
     } else {
         foreach ($approved as $c) {
-            $body      = txpspecialchars(strip_tags($c['body'] ?? ''));
-            $username  = txpspecialchars($c['author']['username'] ?? 'Unknown');
-            $story_url = txpspecialchars($c['story']['url'] ?? '#');
-            $title     = txpspecialchars($c['story']['metadata']['title'] ?? $c['story']['url'] ?? '');
-            $date      = date('j M Y, g:ia', strtotime($c['createdAt']));
-            $view_url  = txpspecialchars($c['story']['url'] . '#coral_thread');
+            $comment_id  = txpspecialchars($c['id']);
+            $revision_id = txpspecialchars($c['revision']['id'] ?? '');
+            $body        = txpspecialchars(strip_tags($c['body'] ?? ''));
+            $username    = txpspecialchars($c['author']['username'] ?? 'Unknown');
+            $story_url   = txpspecialchars($c['story']['url'] ?? '#');
+            $title       = txpspecialchars($c['story']['metadata']['title'] ?? $c['story']['url'] ?? '');
+            $date        = date('j M Y, g:ia', strtotime($c['createdAt']));
+            $view_url    = txpspecialchars($c['story']['url'] . '#coral_thread');
 
             echo <<<HTML
 <div class="dcc-mod-card">
   <div class="dcc-mod-article"><a href="{$story_url}" target="_blank">{$title}</a></div>
   <div class="dcc-mod-meta">{$username} &middot; {$date}</div>
   <div class="dcc-mod-body">{$body}</div>
-  <a href="{$view_url}" target="_blank" class="dcc-mod-view">View comment &rarr;</a>
+  <div class="dcc-mod-actions" style="margin-top:4px">
+    <a href="{$view_url}" target="_blank" class="dcc-mod-view">View &rarr;</a>
+    <form method="post" style="display:inline;margin-left:auto">
+      <input type="hidden" name="daz_coral_action"      value="reject_comment">
+      <input type="hidden" name="daz_coral_comment_id"  value="{$comment_id}">
+      <input type="hidden" name="daz_coral_revision_id" value="{$revision_id}">
+      <input type="hidden" name="daz_queue"             value="unmoderated">
+      <input type="hidden" name="_txp_token"            value="{$txp_token}">
+      <button type="submit" class="dcc-mod-reject" style="padding:4px 12px;font-size:.82rem"
+              onclick="return confirm('Remove this comment?')">&#10007; Remove</button>
+    </form>
+  </div>
 </div>
 HTML;
         }
@@ -1033,6 +1050,7 @@ function daz_coral_recent($atts)
                 id
                 body
                 createdAt
+                status
                 author { id username }
                 story { url metadata { title } }
             }
@@ -1040,7 +1058,10 @@ function daz_coral_recent($atts)
     }";
 
     $result   = daz_coral_api($query);
-    $comments = $result['data']['comments']['nodes'] ?? [];
+    $all      = $result['data']['comments']['nodes'] ?? [];
+    $comments = array_values(array_filter($all, function ($c) {
+        return ($c['status'] ?? '') === 'APPROVED';
+    }));
 
     if (!$comments) return '';
 

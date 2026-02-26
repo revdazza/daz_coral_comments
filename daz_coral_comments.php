@@ -15,7 +15,7 @@ if (!defined('txpinterface')) @die('txp plugin');
  *   <txp:daz_coral_count />   — comment count for a URL
  *
  * @author  daz
- * @version 0.3
+ * @version 0.4
  */
 
 // ============================================================
@@ -488,19 +488,25 @@ function daz_coral_help_page()
 
   <pre>&lt;txp:daz_coral_count /&gt;
 &lt;txp:daz_coral_count url="https://example.com/article/" /&gt;
-&lt;txp:daz_coral_count notext="1" /&gt;</pre>
+&lt;txp:daz_coral_count notext="1" /&gt;
+&lt;txp:daz_coral_count hidezero="1" /&gt;</pre>
 
   <table>
     <tr><th>Attribute</th><th>Default</th><th>Description</th></tr>
     <tr>
       <td>url</td>
       <td><em>Current page URL</em></td>
-      <td>The story URL to count comments for. If omitted, Coral infers from the page's canonical URL.</td>
+      <td>The story URL to count comments for. If omitted, uses the current article's HTTPS permalink.</td>
     </tr>
     <tr>
       <td>notext</td>
       <td>0</td>
       <td>Set to <code>notext="1"</code> to show the number only, without the word "Comments".</td>
+    </tr>
+    <tr>
+      <td>hidezero</td>
+      <td>0</td>
+      <td>Set to <code>hidezero="1"</code> to hide the element entirely when the count is 0.</td>
     </tr>
   </table>
 
@@ -985,16 +991,19 @@ HTML;
  * <txp:daz_coral_count />
  *
  * Attributes:
- *   url    — story URL (defaults to current article's HTTPS permalink)
- *   notext — set to "1" to show number only, no "Comments" label
+ *   url      — story URL (defaults to current article's HTTPS permalink)
+ *   notext   — set to "1" to show number only, no "Comments" label
+ *   hidezero — set to "1" to hide the element entirely when count is 0
  */
 function daz_coral_count($atts)
 {
     static $script_emitted = false;
+    static $counter = 0;
 
     extract(lAtts([
-        'url'    => '',
-        'notext' => '0',
+        'url'      => '',
+        'notext'   => '0',
+        'hidezero' => '0',
     ], $atts));
 
     $domain = rtrim(get_pref('daz_coral_domain', ''), '/');
@@ -1015,7 +1024,25 @@ function daz_coral_count($atts)
         $script_emitted = true;
     }
 
-    return $script . '<span class="coral-count"' . $data_url . $data_notext . '></span>';
+    $counter++;
+    $id = 'dcc-count-' . $counter;
+
+    $hide_script = '';
+    if ($hidezero === '1') {
+        $hide_script = <<<JS
+
+<script>
+(function(){
+    var el = document.getElementById('{$id}');
+    new MutationObserver(function(){
+        el.style.display = (parseInt(el.textContent, 10) === 0) ? 'none' : '';
+    }).observe(el, {childList:true, subtree:true, characterData:true});
+}());
+</script>
+JS;
+    }
+
+    return $script . '<span id="' . $id . '" class="coral-count"' . $data_url . $data_notext . '></span>' . $hide_script;
 }
 
 /**

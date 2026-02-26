@@ -15,7 +15,7 @@ if (!defined('txpinterface')) @die('txp plugin');
  *   <txp:daz_coral_count />   — comment count for a URL
  *
  * @author  daz
- * @version 0.2
+ * @version 0.3
  */
 
 // ============================================================
@@ -985,11 +985,13 @@ HTML;
  * <txp:daz_coral_count />
  *
  * Attributes:
- *   url    — story URL (defaults to current page canonical URL)
+ *   url    — story URL (defaults to current article's HTTPS permalink)
  *   notext — set to "1" to show number only, no "Comments" label
  */
 function daz_coral_count($atts)
 {
+    static $script_emitted = false;
+
     extract(lAtts([
         'url'    => '',
         'notext' => '0',
@@ -998,13 +1000,22 @@ function daz_coral_count($atts)
     $domain = rtrim(get_pref('daz_coral_domain', ''), '/');
     if (!$domain) return '';
 
+    // Auto-generate URL from current article's permalink when not provided
+    if (!$url && isset($GLOBALS['thisarticle'])) {
+        $url = permlinkurl($GLOBALS['thisarticle']);
+        $url = preg_replace('/^http:/', 'https:', $url);
+    }
+
     $data_url    = $url ? ' data-coral-url="' . txpspecialchars($url) . '"' : '';
     $data_notext = ($notext === '1') ? ' data-coral-notext="true"' : '';
 
-    return <<<HTML
-<script class="coral-script" src="{$domain}/assets/js/count.js" defer></script>
-<span class="coral-count"{$data_url}{$data_notext}></span>
-HTML;
+    $script = '';
+    if (!$script_emitted) {
+        $script = "<script class=\"coral-script\" src=\"{$domain}/assets/js/count.js\" defer></script>\n";
+        $script_emitted = true;
+    }
+
+    return $script . '<span class="coral-count"' . $data_url . $data_notext . '></span>';
 }
 
 /**
